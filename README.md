@@ -11,3 +11,9 @@ At the moment, it has limited features, and we need your help to test the softwa
 
 plans:
 drop directly your image, gifs, videos, canvas animations and webgpu shaders.
+
+Stack:
+
+Sveltkit for web-framework
+babylonjs for 
+tweakpane for UI
