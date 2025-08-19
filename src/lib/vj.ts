@@ -31,25 +31,34 @@ export async function createSimpleVJEngine(opts: { width?: number; height?: numb
   const stream = domCanvas && (domCanvas as any).captureStream ? (domCanvas as any).captureStream(fps) : ((offscreen as any).captureStream ? (offscreen as any).captureStream(fps) : null);
 
   return {
-  offscreen,
-  domCanvas,
+    offscreen,
+    domCanvas,
     stream,
     setColor: (rgb: [number, number, number]) => {
       try { worker.postMessage({ type: 'setColor', color: rgb }); } catch (e) {}
     },
-  setMultiplier: (v: number) => { try { worker.postMessage({ type: 'setMultiplier', value: v }); } catch (e) {} },
-  setSpeed: (v: number) => { try { worker.postMessage({ type: 'setSpeed', value: v }); } catch (e) {} },
+    setMultiplier: (v: number) => { try { worker.postMessage({ type: 'setMultiplier', value: v }); } catch (e) {} },
+    setSpeed: (v: number) => { try { worker.postMessage({ type: 'setSpeed', value: v }); } catch (e) {} },
+  setAudioLevel: (v: number) => { try { worker.postMessage({ type: 'setAudioLevel', value: v }); } catch (e) {} },
     resize: (w: number, h: number) => {
-      if (offscreen) {
-        offscreen.width = w;
-        offscreen.height = h;
-      }
-      try { worker.postMessage({ type: 'resize', width: w, height: h }); } catch (e) {}
+      try {
+        if (offscreen) {
+          offscreen.width = w;
+          offscreen.height = h;
+        }
+        worker.postMessage({ type: 'resize', width: w, height: h });
+      } catch (e) {}
     },
     dispose: () => {
       try { worker.postMessage({ type: 'dispose' }); } catch (e) {}
+      try { stream?.getTracks?.forEach((t: MediaStreamTrack) => t.stop()); } catch (e) {}
       try { worker.terminate(); } catch (e) {}
-      try { stream?.getTracks().forEach((t: MediaStreamTrack) => t.stop()); } catch (e) {}
+      // If a DOM canvas was created, remove it from DOM and clear references
+      try {
+        if (domCanvas && (domCanvas as any).parentNode) {
+          (domCanvas as any).parentNode.removeChild(domCanvas);
+        }
+      } catch (e) {}
     }
   };
 }

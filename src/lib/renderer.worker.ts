@@ -9,6 +9,7 @@ let torus: any = null;
 let fps = 60;
 let multiplier = 1;
 let speed = 0.01;
+let audioLevel = 0;
 
 function createScene() {
   if (!engine) return null;
@@ -46,9 +47,18 @@ self.onmessage = (ev: MessageEvent) => {
             // Apply multiplier and rotation speed
             if (torus) {
               try {
-                torus.scaling.x = multiplier;
-                torus.scaling.y = multiplier;
-                torus.scaling.z = multiplier;
+                // map audioLevel to an amplitude in [0,1]
+                let amp = Number(audioLevel) || 0;
+                if (amp < 0) {
+                  // assume dB value from meter, convert to linear amplitude
+                  amp = Math.pow(10, amp / 20);
+                }
+                amp = Math.min(Math.max(amp, 0), 1);
+                const audioBoost = 1 + amp * 3.5; // up to +350% size from audio (more responsive)
+                const finalScale = multiplier * audioBoost;
+                torus.scaling.x = finalScale;
+                torus.scaling.y = finalScale;
+                torus.scaling.z = finalScale;
               } catch (e) {}
               try { torus.rotation.y += speed; } catch (e) {}
             }
@@ -82,7 +92,11 @@ self.onmessage = (ev: MessageEvent) => {
         try { engine.dispose(); } catch (e) {}
       }
       canvas = null; engine = null; scene = null; torus = null;
+  try { (self as any).close(); } catch (e) {}
     } catch (e) {}
+  }
+  else if (msg.type === 'setAudioLevel') {
+    try { audioLevel = Number(msg.value) || 0; } catch (e) { audioLevel = 0; }
   }
   else if (msg.type === 'setMultiplier') {
     try { multiplier = Number(msg.value) || 1; } catch (e) {}

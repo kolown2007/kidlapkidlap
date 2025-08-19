@@ -9,11 +9,13 @@ export interface SceneSetup {
 }
 
 export function createBabylonScene(canvas: HTMLCanvasElement): SceneSetup {
-    // Set canvas size
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    
+    // Do not override the canvas DOM size here. Caller will place the canvas in the UI and
+    // set CSS dimensions. We set the engine hardware scaling level to respect devicePixelRatio
+    // so the internal rendering can be HD while the CSS size fits the preview container.
     const engine = new Engine(canvas, true);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Lower hardwareScalingLevel -> higher internal resolution. Use 1/dpr to improve clarity on hi-dpi screens.
+    engine.setHardwareScalingLevel(1 / dpr);
     const scene = new Scene(engine);
 
     // Camera
