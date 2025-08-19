@@ -1,10 +1,11 @@
-import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, MeshBuilder } from '@babylonjs/core';
+import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, MeshBuilder, StandardMaterial, Color3 } from '@babylonjs/core';
 import type { Mesh } from '@babylonjs/core';
 
 export interface SceneSetup {
     engine: Engine;
     scene: Scene;
     torus: Mesh;
+    material?: StandardMaterial;
     dispose: () => void;
 }
 
@@ -27,12 +28,19 @@ export function createBabylonScene(canvas: HTMLCanvasElement): SceneSetup {
 
     // Torus
     const torus = MeshBuilder.CreateTorus('torus', { diameter: 2, thickness: 0.2 }, scene);
+    // assign a simple standard material so we can toggle wireframe
+    const mat = new StandardMaterial('torus-mat', scene);
+    mat.diffuseColor = new Color3(1, 1, 1);
+    torus.material = mat;
 
     // Resize handler
     const handleResize = () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        engine.resize();
+    // Do not set canvas.width/height here; caller manages backing size.
+    // Only notify the engine that the visible size changed so it can update
+    // its internal viewport. Directly setting canvas pixel buffer here can
+    // clobber a fixed backing (and can set width/height to 0 when the
+    // controller tab is minimized), which breaks projection capture.
+    try { engine.resize(); } catch (e) {}
     };
     
     window.addEventListener('resize', handleResize);
@@ -40,13 +48,15 @@ export function createBabylonScene(canvas: HTMLCanvasElement): SceneSetup {
     // Cleanup function
     const dispose = () => {
         window.removeEventListener('resize', handleResize);
-        engine.dispose();
+    try { mat.dispose(); } catch (e) {}
+    engine.dispose();
     };
 
     return {
         engine,
         scene,
-        torus,
+    torus,
+    material: mat,
         dispose
     };
 }

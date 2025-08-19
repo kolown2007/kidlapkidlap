@@ -2,7 +2,10 @@
 import { onMount } from 'svelte';
 import { initTweakpane } from '$lib/tweakpane';
 import { createBabylonScene, startRenderLoop, type SceneSetup } from '$lib/babylonScene';
+import { Color4 } from '@babylonjs/core';
 import { createSimpleVJEngine } from '$lib/vj';
+import { createProjection } from '$lib/projection';
+import type { ProjectionHandle } from '$lib/projection';
 import { startMic, stopMic, getMeter, disposeAudio, isMicActive } from '$lib/audio';
 
 let canvas: HTMLCanvasElement;
@@ -19,6 +22,12 @@ let vjPreviewContainer: HTMLElement;
 let previewBabylonSetup: SceneSetup | null = null;
 let previewActive = false;
 let previewStream: MediaStream | null = null;
+// Projection helper: an offscreen canvas we draw into at a fixed resolution and
+// captureStream from. Keeps projection quality stable regardless of preview
+// visibility or controller resizing.
+let projection: ProjectionHandle | null = null;
+let projectionPopup: Window | null = null;
+let preferSecondScreen = false;
 
 let value = 3;
 let sliderMult = 1;
@@ -27,6 +36,16 @@ let pendingMultiplier: number | null = null;
 const _throttleMs = 33;
 let _lastSent = 0;
 let _throttleTimer: ReturnType<typeof setTimeout> | null = null;
+
+// When true, the ResizeObserver and window resize handler will skip changing the
+// canvas backing size. Used while projecting to a popup so controller resizes
+// don't resize the backing used by the projection stream.
+let suppressResize = false;
+
+// Fixed backing resolution for Babylon (pixels). CaptureStream will always
+// emit frames at this resolution regardless of CSS/layout changes.
+const FIXED_BACKING_W = 1280;
+const FIXED_BACKING_H = 720;
 
 function scheduleSendMultiplier(rawValue: number) {
   const scaled = 0.5 + ((rawValue / 9) * 1.5);
@@ -138,39 +157,105 @@ function openSecondCanvasWindow() {
   }, 200);
 }
 
-function openProjectionWindow() {
-  const popup = window.open('/third-canvas', '_blank', 'width=1280,height=720');
-  if (!popup) return;
-  if (!canvas || typeof canvas.captureStream !== 'function') return;
-
-  // Try to size the canvas backing to the popup's inner size (or fallback to 1280x720)
+async function openProjectionWindow() {
+  // Try to open the popup on an external monitor when possible. This uses
+  // the Window Placement API (getScreenDetails) when available. This is
+  // best-effort: the API may be unavailable or require permission; if so we
+  // fall back to a normal centered popup.
+  let left = undefined as number | undefined;
+  let top = undefined as number | undefined;
+  let width = 1280;
+  let height = 720;
   try {
-    const targetW = popup.innerWidth || 1280;
-    const targetH = popup.innerHeight || 720;
-    setCanvasBackingSize(targetW, targetH);
+    if (preferSecondScreen) {
+      const maybeGetScreens = (window as any).getScreenDetails;
+      if (typeof maybeGetScreens === 'function') {
+      try {
+        const sd = (window as any).getScreenDetails();
+        // Some implementations return a promise, some return an object.
+        const details = (sd && typeof sd.then === 'function') ? await sd : sd;
+        const screens = details && details.screens;
+        if (screens && screens.length > 1) {
+          // pick a non-primary screen if available
+          const other = screens.find((s: any) => !s.isPrimary) || screens[1];
+          // prefer available/visible rect properties
+          left = other.availLeft ?? other.left ?? other.x ?? other.availX;
+          top = other.availTop ?? other.top ?? other.y ?? other.availY;
+          width = other.availWidth ?? other.width ?? other.availW ?? width;
+          height = other.availHeight ?? other.height ?? other.availH ?? height;
+        }
+      } catch (e) {
+        // permission denied or API error, fall back
+      }
+      } else if ((window as any).screen && (window as any).screen.availWidth) {
+      // Best-effort: place popup to the right of the current screen
+      try {
+        const sw = (window as any).screen.availWidth;
+        const sh = (window as any).screen.availHeight;
+        left = sw + 50;
+        top = 50;
+        width = Math.min(width, Math.floor(sw));
+        height = Math.min(height, Math.floor(sh));
+      } catch (e) {}
+    }
+    }
   } catch (e) {}
 
-  const stream = canvas.captureStream(60);
+  // Build features string using computed coords if available
+  let features = `width=${width},height=${height}`;
+  if (typeof left === 'number' && typeof top === 'number') {
+    features += `,left=${left},top=${top}`;
+  }
+
+  const popup = window.open('/third-canvas', '_blank', features);
+  if (!popup) return;
+  if (!canvas) return;
+  projectionPopup = popup;
+
+  try {
+    if (!projection) projection = createProjection(FIXED_BACKING_W, FIXED_BACKING_H, 60);
+    const stream = projection.start(canvas);
+    if (!stream) return;
+
   const attachInterval = setInterval(() => {
-    try {
-      if (popup.closed) {
-        clearInterval(attachInterval);
-        // Stop stream tracks when popup closes
-        if (stream) stream.getTracks().forEach(t => t.stop());
-        // restore preview backing
-        try { restoreCanvasToPreview(); } catch (e) {}
-        return;
+      try {
+        if (popup.closed) {
+          clearInterval(attachInterval);
+      try { projection?.stop(); } catch (e) {}
+      try { projection?.dispose(); } catch (e) {}
+      projection = null;
+      projectionPopup = null;
+          return;
+        }
+        const video = popup.document.getElementById('mirror') || popup.document.getElementById('projection-video');
+        if (video) {
+          (video as HTMLVideoElement).srcObject = stream;
+          (video as HTMLVideoElement).play().catch(() => {});
+          clearInterval(attachInterval);
+        }
+      } catch (e) {
+        // popup not ready
       }
-      const video = popup.document.getElementById('mirror');
-      if (video) {
-        (video as HTMLVideoElement).srcObject = stream;
-        (video as HTMLVideoElement).play().catch(() => {});
-        clearInterval(attachInterval);
-      }
-    } catch (e) {
-      // popup not ready
+    }, 200);
+  } catch (e) {
+    console.warn('Failed to open projection', e);
+  }
+}
+
+async function toggleProjection() {
+  try {
+    if (projectionPopup && !projectionPopup.closed) {
+      try { projectionPopup.close(); } catch (e) {}
+      try { projection?.stop(); } catch (e) {}
+      try { projection?.dispose(); } catch (e) {}
+      projection = null;
+      projectionPopup = null;
+      return;
     }
-  }, 200);
+  await openProjectionWindow();
+  } catch (e) {
+    console.warn('toggleProjection failed', e);
+  }
 }
 
 function stopPreview() {
@@ -271,15 +356,12 @@ onMount(() => {
     let ro: ResizeObserver | null = null;
     const resizeCanvasToContainer = () => {
       try {
+        if (suppressResize) return;
+        // Keep CSS sizing only; do not change pixel backing which is fixed.
         if (!vjPreviewContainer || !canvas) return;
-        const dpr = Math.max(window.devicePixelRatio || 1, 1);
-        const w = Math.max(1, Math.floor(vjPreviewContainer.clientWidth * dpr));
-        const h = Math.max(1, Math.floor(vjPreviewContainer.clientHeight * dpr));
-        if (canvas.width !== w || canvas.height !== h) {
-          canvas.width = w;
-          canvas.height = h;
-          try { babylonSetup?.engine?.resize(); } catch (e) {}
-        }
+        // Ensure the canvas CSS fills the container (already set) and call
+        // engine.resize so Babylon knows the visual size changed.
+        try { babylonSetup?.engine?.resize(); } catch (e) {}
       } catch (e) {}
     };
 
@@ -290,6 +372,11 @@ onMount(() => {
       canvas.style.height = '100%';
       canvas.style.display = 'block';
       canvas.style.objectFit = 'cover';
+
+      // Set the fixed pixel backing once so captureStream always uses this
+      // resolution. This keeps projection frames stable even if the controller
+      // window is resized.
+      try { setCanvasBackingSize(FIXED_BACKING_W, FIXED_BACKING_H); } catch (e) {}
 
       // Append canvas into preview container (replace placeholder content)
       if (vjPreviewContainer) {
@@ -321,18 +408,34 @@ onMount(() => {
     }
 
     // Setup Tweakpane via helper
-    const tp = initTweakpane(tweakpaneContainer, { multiplier: 3, micActive: false }, {
+  const tp = initTweakpane(tweakpaneContainer, { multiplier: 3, micActive: false, wireframe: false, backgroundColor: '#000000', preferSecondScreen: false }, {
   onSlider(v) { value = v; scheduleSendMultiplier(v); },
-        onMicToggle: async (on) => {
-            if (on && !micActive) {
-                await startMic();
-                micActive = isMicActive();
-            } else if (!on && micActive) {
-                await stopMic();
-                micActive = isMicActive();
-            }
-        }
-    });
+    onMicToggle: async (on) => {
+      if (on && !micActive) {
+        await startMic();
+        micActive = isMicActive();
+      } else if (!on && micActive) {
+        await stopMic();
+        micActive = isMicActive();
+      }
+    },
+    onWireframeToggle: (on) => {
+      try { if (babylonSetup && babylonSetup.material) { babylonSetup.material.wireframe = !!on; } } catch (e) {}
+    },
+    onBackgroundColorChange: (color) => {
+      try {
+        // set canvas background so preview area immediately reflects the change
+        if (canvas) canvas.style.background = color;
+        // if Babylon scene exists, set scene.clearColor (Color4) from hex
+        try {
+          if (babylonSetup && babylonSetup.scene) {
+            (babylonSetup.scene as any).clearColor = Color4.FromHexString ? Color4.FromHexString(color) : new Color4(0,0,0,1);
+          }
+        } catch (e) {}
+      } catch (e) {}
+  },
+  onPreferSecondScreen: (on) => { preferSecondScreen = !!on; }
+  });
 
     return () => {
   try { tp.dispose(); } catch (e) {}
@@ -370,7 +473,7 @@ onMount(() => {
                     {previewActive ? 'Stop Preview' : 'Start Preview'}
                   </button>
 
-                  <button on:click={openProjectionWindow} class="px-3 py-2 rounded text-white bg-gray-800 border border-gray-700 hover:bg-gray-700 focus:outline-none">Open Projection</button>
+                  <button on:click={toggleProjection} class="px-3 py-2 rounded text-white bg-gray-800 border border-gray-700 hover:bg-gray-700 focus:outline-none">{projectionPopup && !projectionPopup.closed ? 'Close Projection' : 'Open Projection'}</button>
                 </div>
               </div>
             </div>
