@@ -3,7 +3,6 @@ import { onMount } from 'svelte';
 import { initTweakpane } from '$lib/tweakpane';
 import { createBabylonScene, startRenderLoop, type SceneSetup } from '$lib/babylonScene';
 import { Color4 } from '@babylonjs/core';
-import { createSimpleVJEngine } from '$lib/vj';
 import { createProjection } from '$lib/projection';
 import type { ProjectionHandle } from '$lib/projection';
 import { startMic, stopMic, getMeter, disposeAudio, isMicActive } from '$lib/audio';
