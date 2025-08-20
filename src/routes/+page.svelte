@@ -1,16 +1,22 @@
 <script lang="ts">
 import { onMount } from 'svelte';
 // Using class-based SceneDefinitions only
-import { createSceneController } from '$lib/controllers/sceneController';
 import { Color4 } from '@babylonjs/core';
-import { startMic, stopMic, getMeter, disposeAudio, isMicActive } from '$lib/audio';
-import { createPreviewController } from '$lib/controllers/previewController';
-import cubeScene from '$lib/visuals/cubeScene';
-import torusScene from '$lib/visuals/torusScene';
-import sphereScene from '$lib/visuals/sphereScene';
-import { createTweakpaneController } from '$lib/controllers/tweakpaneController';
-import { createProjectionController } from '$lib/controllers/projectionController';
-import { createVJController } from '$lib/controllers/vjController';
+import {
+  createSceneController,
+  startMic,
+  stopMic,
+  getMeter,
+  disposeAudio,
+  isMicActive,
+  createPreviewController,
+  createTweakpaneController,
+  createProjectionController,
+  createVJController,
+  TorusSceneDef as torusScene,
+  SphereSceneDef as sphereScene,
+  CubeSceneDef as cubeScene,
+} from '$lib';
 
 let canvas: HTMLCanvasElement | undefined;
 let systemPaneContainer: HTMLDivElement | undefined;

@@ -1,5 +1,5 @@
-import type { ProjectionHandle } from '../projection';
-import { createProjection } from '../projection';
+import type { ProjectionHandle } from './projection';
+import { createProjection } from './projection';
 
 export type ProjectionControllerOptions = {
   width?: number;
