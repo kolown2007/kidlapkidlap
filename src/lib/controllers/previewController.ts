@@ -1,6 +1,5 @@
-import type { SceneSetup } from './babylonScene';
-import { createBabylonScene, startRenderLoop } from './babylonScene';
-import { setCanvasBackingSize } from './canvasUtils';
+// fully class-based scenes only: SceneDefinitions must provide a create(canvas, opts?) -> SceneInstance
+import { setCanvasBackingSize } from '../core/canvasUtils';
 
 export type RenderDataProvider = () => { volume: number; value: number };
 export type PreviewControllerOptions = {
@@ -9,7 +8,8 @@ export type PreviewControllerOptions = {
   fps?: number;
   shouldSkipResize?: () => boolean;
   /** Optional factory to create a scene (torus/sphere). Signature: (canvas) => SceneSetup-like */
-  sceneFactory?: (canvas: HTMLCanvasElement) => any;
+  /** Optional class-based scene definition (new API) */
+  sceneDef?: any;
   /** Optional render loop starter: (engine, scene, mesh, getAudioData) */
   startLoop?: (engine: any, scene: any, mesh: any, getAudioData: () => { volume: number; value: number }) => void;
 };
@@ -17,7 +17,8 @@ export type PreviewControllerOptions = {
 export function createPreviewController(container: HTMLElement | null, renderDataProvider: RenderDataProvider, opts: PreviewControllerOptions = {}) {
   let canvas: HTMLCanvasElement | null = null;
   let ro: ResizeObserver | null = null;
-  let babylonSetup: SceneSetup | null = null;
+  let babylonSetup: any | null = null;
+  let sceneInstance: any = null;
   let previewActive = false;
 
   const fixedW = opts.fixedWidth ?? 1280;
@@ -31,7 +32,7 @@ export function createPreviewController(container: HTMLElement | null, renderDat
     } catch (e) {}
   }
 
-  function start() {
+  async function start() {
     if (previewActive) return;
     if (!container) return;
 
@@ -58,15 +59,25 @@ export function createPreviewController(container: HTMLElement | null, renderDat
     resizeCanvasToContainer();
 
     try {
-      // Use provided sceneFactory/startLoop when available (allows sphere vs torus)
-      if (opts.sceneFactory) {
-        babylonSetup = opts.sceneFactory(canvas as HTMLCanvasElement);
+      // Require class-based SceneDefinition: pass renderDataProvider via create opts
+      if (opts.sceneDef && typeof opts.sceneDef.create === 'function') {
+        try {
+          const instance = await opts.sceneDef.create(canvas as HTMLCanvasElement, { renderDataProvider });
+          sceneInstance = instance;
+          // allow scene instance to init if it provides init()
+          if (typeof (sceneInstance as any).init === 'function') {
+            try { await (sceneInstance as any).init(); } catch (e) { /* swallow */ }
+          }
+          // start the scene's internal loop if it exposes start()
+          try { if (typeof (sceneInstance as any).start === 'function') (sceneInstance as any).start(); } catch (e) { /* swallow */ }
+          // expose legacy-style setup if the scene provides it (optional)
+          babylonSetup = typeof sceneInstance?.getSetup === 'function' ? sceneInstance.getSetup() : null;
+        } catch (e) {
+          console.warn('previewController: failed to create class-based scene', e);
+        }
       } else {
-        babylonSetup = createBabylonScene(canvas as HTMLCanvasElement);
+        console.warn('previewController: no class-based sceneDef provided; cannot initialize preview');
       }
-      const loopStarter = opts.startLoop ?? startRenderLoop;
-      const mesh = (babylonSetup as any).torus ?? (babylonSetup as any).sphere ?? null;
-  try { if (babylonSetup) { loopStarter(babylonSetup.engine, babylonSetup.scene, mesh, renderDataProvider); } } catch (e) {}
     } catch (e) {
       console.warn('createPreviewController: failed to init Babylon scene', e);
     }
@@ -76,7 +87,11 @@ export function createPreviewController(container: HTMLElement | null, renderDat
 
   function stop() {
     try {
-      // dispose Babylon scene if present
+      // dispose Babylon scene / instance if present
+      if (sceneInstance) {
+        try { if (typeof sceneInstance.dispose === 'function') sceneInstance.dispose(); } catch (e) {}
+        sceneInstance = null;
+      }
       if (babylonSetup) {
         try { (babylonSetup as any).dispose(); } catch (e) {}
         babylonSetup = null;
@@ -140,7 +155,8 @@ export function createPreviewController(container: HTMLElement | null, renderDat
     stop,
     dispose,
     getCanvas: () => canvas,
-    getSceneSetup: () => babylonSetup,
+  getSceneSetup: () => babylonSetup,
+  getSceneInstance: () => sceneInstance,
   } as const;
 }
 

@@ -1,8 +1,7 @@
-import type { SceneSetup } from '$lib/babylonScene';
 import { Color4 } from '@babylonjs/core';
 
 export function createSceneController() {
-  let setup: SceneSetup | null = null;
+  let setup: any | null = null;
   let pendingMultiplier: number | null = null;
   let pendingWireframe: boolean | null = null;
   let pendingBg: string | null = null;
@@ -30,7 +29,7 @@ export function createSceneController() {
     } catch (e) {}
   }
 
-  function setSceneSetup(s: SceneSetup | null) {
+  function setSceneSetup(s: any | null) {
     setup = s;
     applyPending();
   }
