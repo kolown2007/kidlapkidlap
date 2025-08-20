@@ -10,11 +10,12 @@ export function createSceneController() {
   function applyPending() {
     try {
       if (!setup) return;
-      if (pendingMultiplier != null && setup.torus) {
+      const mesh = (setup as any).torus ?? (setup as any).sphere ?? null;
+      if (pendingMultiplier != null && mesh) {
         try {
-          setup.torus.scaling.x = pendingMultiplier;
-          setup.torus.scaling.y = pendingMultiplier;
-          setup.torus.scaling.z = pendingMultiplier;
+          mesh.scaling.x = pendingMultiplier;
+          mesh.scaling.y = pendingMultiplier;
+          mesh.scaling.z = pendingMultiplier;
         } catch (e) {}
         pendingMultiplier = null;
       }
@@ -38,13 +39,13 @@ export function createSceneController() {
 
   function setMultiplier(mult: number) {
     try {
-      if (setup && setup.torus) {
+      const mesh = (setup as any)?.torus ?? (setup as any)?.sphere ?? null;
+      if (setup && mesh) {
         try {
-          setup.torus.scaling.x = mult;
-          setup.torus.scaling.y = mult;
-          setup.torus.scaling.z = mult;
+          mesh.scaling.x = mult;
+          mesh.scaling.y = mult;
+          mesh.scaling.z = mult;
         } catch (e) {
-          // fall through to pending
           pendingMultiplier = mult;
         }
       } else {

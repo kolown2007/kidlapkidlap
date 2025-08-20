@@ -114,6 +114,39 @@ export function createProjectionController(opts: ProjectionControllerOptions = {
     }
   }
 
+  async function reattach(newCanvas: HTMLCanvasElement | null) {
+    try {
+      if (!popup || popup.closed) return null;
+      if (!handle) handle = createProjection(fixedW, fixedH, fps);
+      // stop previous copy loop and start with new source
+      try { handle.stop(); } catch (e) {}
+      const stream = handle.start(newCanvas as HTMLCanvasElement);
+      if (!stream) return null;
+
+      // attach to video element in popup
+      const attachInterval = setInterval(() => {
+        try {
+          if (!popup || popup.closed) {
+            clearInterval(attachInterval);
+            return;
+          }
+          const video = popup.document.getElementById('mirror') || popup.document.getElementById('projection-video');
+          if (video) {
+            (video as HTMLVideoElement).srcObject = stream;
+            (video as HTMLVideoElement).play().catch(() => {});
+            clearInterval(attachInterval);
+          }
+        } catch (e) {
+          // popup may not be ready
+        }
+      }, 200);
+
+      return popup;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function close() {
     try {
       if (popup && !popup.closed) try { popup.close(); } catch (e) {}
@@ -144,7 +177,7 @@ export function createProjectionController(opts: ProjectionControllerOptions = {
 
   function setOnChange(cb: ((open: boolean) => void) | null) { onChange = cb; }
 
-  return { open, close, toggle, isOpen, getPopup: () => popup, setOnChange } as const;
+  return { open, close, toggle, isOpen, getPopup: () => popup, setOnChange, reattach } as const;
 }
 
 export default createProjectionController;

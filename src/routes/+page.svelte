@@ -5,6 +5,7 @@ import { createSceneController } from '$lib/sceneController';
 import { Color4 } from '@babylonjs/core';
 import { startMic, stopMic, getMeter, disposeAudio, isMicActive } from '$lib/audio';
 import { createPreviewController } from '$lib/previewController';
+import createBabylonSphereScene, { startSphereRenderLoop } from '$lib/babylonSphere';
 import { createTweakpaneController } from '$lib/tweakpaneController';
 import { createProjectionController } from '$lib/projectionController';
 import { createVJController } from '$lib/vjController';
@@ -28,6 +29,7 @@ let projectionOpen = false;
 let value = 3;
 let sliderMult = 1;
 let pendingMultiplier: number | null = null;
+let currentSceneId: string = 'torus';
 
 const FIXED_BACKING_W = 1280;
 const FIXED_BACKING_H = 720;
@@ -86,11 +88,16 @@ async function togglePreview() {
   try {
     if (!vjPreviewContainer) return;
     if (!preview) {
-      preview = createPreviewController(vjPreviewContainer ?? null, () => {
+      const opts: any = { fixedWidth: FIXED_BACKING_W, fixedHeight: FIXED_BACKING_H, shouldSkipResize: () => false };
+      if (currentSceneId === 'sphere') {
+        opts.sceneFactory = createBabylonSphereScene;
+        opts.startLoop = startSphereRenderLoop;
+      }
+  preview = createPreviewController(vjPreviewContainer ?? null, () => {
         const meterValue = meter?.getValue ? meter.getValue() : 0;
         const volume = Array.isArray(meterValue) ? meterValue[0] : meterValue;
         return { volume, value };
-      }, { fixedWidth: FIXED_BACKING_W, fixedHeight: FIXED_BACKING_H, shouldSkipResize: () => false });
+  }, opts);
     }
     try { preview.start(); } catch (e) {}
     try { canvas = preview.getCanvas() ?? canvas; } catch (e) {}
@@ -105,11 +112,13 @@ async function togglePreview() {
 onMount(() => {
   meter = getMeter();
   try {
-    preview = createPreviewController(vjPreviewContainer ?? null, () => {
+  const opts: any = { fixedWidth: FIXED_BACKING_W, fixedHeight: FIXED_BACKING_H, shouldSkipResize: () => false };
+  if (currentSceneId === 'sphere') { opts.sceneFactory = createBabylonSphereScene; opts.startLoop = startSphereRenderLoop; }
+  preview = createPreviewController(vjPreviewContainer ?? null, () => {
       const meterValue = meter?.getValue ? meter.getValue() : 0;
       const volume = Array.isArray(meterValue) ? meterValue[0] : meterValue;
       return { volume, value };
-    }, { fixedWidth: FIXED_BACKING_W, fixedHeight: FIXED_BACKING_H, shouldSkipResize: () => false });
+  }, opts);
     try { preview.start(); } catch (e) {}
     try { canvas = preview.getCanvas() ?? canvas; } catch (e) {}
     try { babylonSetup = preview.getSceneSetup() ?? babylonSetup; sceneController.setSceneSetup(babylonSetup); } catch (e) {}
@@ -125,7 +134,28 @@ onMount(() => {
     },
     setWireframe: (on) => { try { sceneController.setWireframe(!!on); } catch (e) {} },
     setBackgroundColor: (color) => { try { if (canvas) canvas.style.background = color; sceneController.setBackgroundColor(color); } catch (e) {} },
-    setPreferSecondScreen: (on) => { preferSecondScreen = !!on; }
+    setPreferSecondScreen: (on) => { preferSecondScreen = !!on; },
+  onSceneChange: async (id) => {
+      try {
+        if (id === currentSceneId) return;
+        // Dispose current preview and scene for performance
+        try { preview?.dispose?.(); } catch (e) {}
+        try { sceneController.dispose(); } catch (e) {}
+        preview = null;
+        babylonSetup = null;
+        // ensure state reflects stopped preview so togglePreview will start a fresh one
+        previewActive = false;
+        currentSceneId = id;
+        // Start the newly selected scene
+        try { await togglePreview(); } catch (e) {}
+        // If a projection popup is open, reattach it to the new canvas
+        try {
+          if (projectionController && projectionController.isOpen && projectionController.isOpen()) {
+            try { await projectionController.reattach?.(canvas ?? null); } catch (e) {}
+          }
+        } catch (e) {}
+      } catch (e) {}
+    }
   });
 
   return () => {

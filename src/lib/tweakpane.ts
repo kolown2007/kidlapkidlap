@@ -6,6 +6,7 @@ export type TweakCallbacks = {
   onWireframeToggle?: (on: boolean) => void;
   onBackgroundColorChange?: (cssColor: string) => void;
   onPreferSecondScreen?: (on: boolean) => void;
+  onSceneChange?: (sceneId: string) => void;
 };
 
 export function initTweakpane(container: HTMLElement | null, initial: any = { multiplier: 3, micActive: false }, callbacks: TweakCallbacks = {}) {
@@ -18,6 +19,7 @@ export function initTweakpane(container: HTMLElement | null, initial: any = { mu
   wireframe: initial.wireframe ?? false,
   backgroundColor: initial.backgroundColor ?? '#000000',
   preferSecondScreen: initial.preferSecondScreen ?? false,
+  scene: initial.scene ?? 'torus',
   };
 
   // use addBinding if available, fall back to addInput
@@ -51,6 +53,16 @@ export function initTweakpane(container: HTMLElement | null, initial: any = { mu
   const preferInput = addBinding ? addBinding(params, 'preferSecondScreen', { label: 'Use 2nd Screen' }) : addInput(params, 'preferSecondScreen', { label: 'Use 2nd Screen' });
   if (preferInput && typeof preferInput.on === 'function') {
     preferInput.on('change', (ev: any) => { callbacks.onPreferSecondScreen?.(ev.value ?? params.preferSecondScreen); });
+  }
+
+  // Scene selection dropdown
+  const sceneOptions = {
+    'Torus': 'torus',
+    'Sphere': 'sphere'
+  };
+  const sceneInput = addBinding ? addBinding(params, 'scene', { options: sceneOptions, label: 'Scene' }) : addInput(params, 'scene', { options: sceneOptions, label: 'Scene' });
+  if (sceneInput && typeof sceneInput.on === 'function') {
+    sceneInput.on('change', (ev: any) => { callbacks.onSceneChange?.(ev.value ?? params.scene); });
   }
 
   return {

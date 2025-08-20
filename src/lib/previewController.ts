@@ -8,6 +8,10 @@ export type PreviewControllerOptions = {
   fixedHeight?: number;
   fps?: number;
   shouldSkipResize?: () => boolean;
+  /** Optional factory to create a scene (torus/sphere). Signature: (canvas) => SceneSetup-like */
+  sceneFactory?: (canvas: HTMLCanvasElement) => any;
+  /** Optional render loop starter: (engine, scene, mesh, getAudioData) */
+  startLoop?: (engine: any, scene: any, mesh: any, getAudioData: () => { volume: number; value: number }) => void;
 };
 
 export function createPreviewController(container: HTMLElement | null, renderDataProvider: RenderDataProvider, opts: PreviewControllerOptions = {}) {
@@ -54,8 +58,15 @@ export function createPreviewController(container: HTMLElement | null, renderDat
     resizeCanvasToContainer();
 
     try {
-      babylonSetup = createBabylonScene(canvas as HTMLCanvasElement);
-      startRenderLoop(babylonSetup.engine, babylonSetup.scene, babylonSetup.torus, renderDataProvider);
+      // Use provided sceneFactory/startLoop when available (allows sphere vs torus)
+      if (opts.sceneFactory) {
+        babylonSetup = opts.sceneFactory(canvas as HTMLCanvasElement);
+      } else {
+        babylonSetup = createBabylonScene(canvas as HTMLCanvasElement);
+      }
+      const loopStarter = opts.startLoop ?? startRenderLoop;
+      const mesh = (babylonSetup as any).torus ?? (babylonSetup as any).sphere ?? null;
+  try { if (babylonSetup) { loopStarter(babylonSetup.engine, babylonSetup.scene, mesh, renderDataProvider); } } catch (e) {}
     } catch (e) {
       console.warn('createPreviewController: failed to init Babylon scene', e);
     }

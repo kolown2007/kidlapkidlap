@@ -6,6 +6,7 @@ export type TweakpaneDeps = {
   setWireframe: (on: boolean) => void;
   setBackgroundColor: (color: string) => void;
   setPreferSecondScreen: (on: boolean) => void;
+  onSceneChange?: (sceneId: string) => void;
 };
 
 export function createTweakpaneController(container: HTMLElement | null, initial: any, deps: TweakpaneDeps) {
@@ -26,6 +27,9 @@ export function createTweakpaneController(container: HTMLElement | null, initial
     },
     onPreferSecondScreen: (on) => {
       try { deps.setPreferSecondScreen(!!on); } catch (e) {}
+    },
+    onSceneChange: (id) => {
+      try { deps.onSceneChange?.(id); } catch (e) {}
     }
   };
 
