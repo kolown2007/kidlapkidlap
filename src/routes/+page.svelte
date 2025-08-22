@@ -13,10 +13,8 @@ import {
   createTweakpaneController,
   createProjectionController,
   createVJController,
-  TorusSceneDef as torusScene,
-  SphereSceneDef as sphereScene,
-  CubeSceneDef as cubeScene,
 } from '$lib';
+import { sceneMap } from '$lib/visuals/registry';
 
 let canvas: HTMLCanvasElement | undefined;
 let systemPaneContainer: HTMLDivElement | undefined;
@@ -39,7 +37,7 @@ let tp: ReturnType<typeof createTweakpaneController> | null = null;
 let value = 3;
 let sliderMult = 1;
 let pendingMultiplier: number | null = null;
-let currentSceneId: string = 'torus';
+let currentSceneId: string = 'sphere';
 
 const FIXED_BACKING_W = 1280;
 const FIXED_BACKING_H = 720;
@@ -100,14 +98,9 @@ async function togglePreview() {
   let opts: any = { fixedWidth: FIXED_BACKING_W, fixedHeight: FIXED_BACKING_H, shouldSkipResize: () => false };
   if (!preview) {
       // Prefer class-based SceneDefinitions for newer scenes
-      if (currentSceneId === 'sphere') {
-            opts.sceneDef = sphereScene;
-          } else if (currentSceneId === 'cube') {
-        opts.sceneDef = cubeScene;
-      } else if (currentSceneId === 'torus') {
-        opts.sceneDef = torusScene;
-      }
-  preview = createPreviewController(vjPreviewContainer ?? null, () => {
+  // Use centralized sceneMap to locate a scene definition
+  opts.sceneDef = sceneMap[currentSceneId] ?? sceneMap['sphere'];
+    preview = createPreviewController(vjPreviewContainer ?? null, () => {
         const meterValue = meter?.getValue ? meter.getValue() : 0;
         const volume = Array.isArray(meterValue) ? meterValue[0] : meterValue;
         return { volume, value };
@@ -137,9 +130,9 @@ onMount(() => {
   meter = getMeter();
   try {
   const opts: any = { fixedWidth: FIXED_BACKING_W, fixedHeight: FIXED_BACKING_H, shouldSkipResize: () => false };
-  if (currentSceneId === 'sphere') { opts.sceneDef = sphereScene; }
-  else if (currentSceneId === 'cube') { opts.sceneDef = cubeScene; }
-  else if (currentSceneId === 'torus') { opts.sceneDef = torusScene; }
+  if (currentSceneId === 'sphere') { opts.sceneDef = sceneMap['sphere']; }
+  
+  
   preview = createPreviewController(vjPreviewContainer ?? null, () => {
       const meterValue = meter?.getValue ? meter.getValue() : 0;
       const volume = Array.isArray(meterValue) ? meterValue[0] : meterValue;
@@ -185,7 +178,7 @@ onMount(() => {
     const instance = (preview as any)?.getSceneInstance ? (preview as any).getSceneInstance() : null;
     if (instance && tp && typeof tp.rebuildForScene === 'function') {
       try {
-        const sceneDef = currentSceneId === 'sphere' ? sphereScene : (currentSceneId === 'cube' ? cubeScene : torusScene);
+  const sceneDef = currentSceneId === 'sphere' ? sceneMap['sphere'] : (currentSceneId === 'marble' ? sceneMap['marble'] : sceneMap['sphere']);
         try { console.warn('rebuilding tweakpane for scene', { sceneId: sceneDef?.id, controls: sceneDef?.controls?.length ?? 0, hasApplyControl: typeof instance.applyControl === 'function' }); } catch (e) {}
         tp.rebuildForScene(sceneDef, instance);
       } catch (e) { console.warn('tp.rebuildForScene failed', e); }

@@ -16,10 +16,7 @@ export * from './core/sceneBase';
 // Audio
 export * from './audio/index';
 
-// Visual scenes
-export { default as TorusSceneDef } from './visuals/torusScene';
-export { default as SphereSceneDef } from './visuals/sphereScene';
-export { default as CubeSceneDef } from './visuals/cubeScene';
+// Visual scenes are exposed via the visuals registry
 
 // UI
 export * from './ui/tweakpane';

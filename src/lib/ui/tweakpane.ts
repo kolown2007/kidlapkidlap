@@ -1,4 +1,5 @@
 import { Pane } from 'tweakpane';
+import { getSceneOptions } from '../visuals/registry';
 
 export type TweakCallbacks = {
   onSlider?: (v: number) => void;
@@ -14,16 +15,16 @@ export type TweakCallbacks = {
 export function initTweakpane(container: HTMLElement | null, initial: any = { multiplier: 3, micActive: false, hideCommon: false }, callbacks: TweakCallbacks = {}) {
   if (!container) return { dispose: () => {} };
 
-  const pane = new Pane({ container, title: 'Visuals' } as any);
+  const pane = new Pane({ container, title: 'System Controls' } as any);
   const params: any = {
   preferSecondScreen: initial.preferSecondScreen ?? false,
-  scene: initial.scene ?? 'torus',
+  scene: initial.scene ?? 'sphere',
   };
 
   // Optionally create a persistent folder for controls shared across visuals (system controls).
   let commonFolder: any = null;
   if (!initial.hideCommon) {
-    commonFolder = (pane as any).addFolder ? (pane as any).addFolder({ title: 'System Controls' }) : null;
+    commonFolder = (pane as any).addFolder ? (pane as any).addFolder({ title: 'Controls' }) : null;
 
     // use folder-scoped addBinding/addInput if available, fall back to folder.addInput
     const addBinding = commonFolder && (commonFolder as any).addBinding ? (commonFolder as any).addBinding.bind(commonFolder) : undefined;
@@ -45,12 +46,8 @@ export function initTweakpane(container: HTMLElement | null, initial: any = { mu
       try { projBtn?.on?.('click', () => { callbacks.onToggleProjection?.(); }); } catch (e) {}
     } catch (e) {}
 
-    // Scene selection dropdown
-    const sceneOptions = {
-      'Torus': 'torus',
-      'Sphere': 'sphere',
-      'Cube': 'cube'
-    };
+    // Scene selection dropdown - populate from central registry
+  const sceneOptions = getSceneOptions();
     const sceneInput = addBinding ? addBinding(params, 'scene', { options: sceneOptions, label: 'Visuals' }) : (addInput ? addInput(params, 'scene', { options: sceneOptions, label: 'Visuals' }) : (pane as any).addInput(params, 'scene', { options: sceneOptions, label: 'Visuals' }));
     if (sceneInput && typeof sceneInput.on === 'function') {
       sceneInput.on('change', (ev: any) => { callbacks.onSceneChange?.(ev.value ?? params.scene); });
