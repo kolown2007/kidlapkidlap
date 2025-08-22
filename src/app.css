@@ -119,3 +119,15 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Force full-page black background for the app shell and ensure full-height layout */
+html, body {
+  height: 100%;
+  background-color: #000 !important;
+  color: #fff;
+}
+
+/* If the app mounts into a specific root element, ensure it also fills the viewport */
+#svelte, #app, #root {
+  min-height: 100%;
+}

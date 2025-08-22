@@ -17,3 +17,9 @@ Stack:
 Sveltkit for web-framework
 babylonjs for 
 tweakpane for UI
+
+```text
++-----------+   +-----------+   +-------------+   +------------------+   +-------+
+| registry  |-->| tweakpane |-->| +page.svelte |-->| preview controller |-->| scene |
++-----------+   +-----------+   +-------------+   +------------------+   +-------+
+```
